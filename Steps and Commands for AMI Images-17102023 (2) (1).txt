@@ -1,0 +1,240 @@
+Launch image PDK-FINAL-IMAGE-13102023 (AMI Ohio Region) as g4dn.2xlarge type and disk as 100GB
+### Login as root on EC2 Connect ### 
+
+sudo passwd ubuntu
+curl ifconfig.me
+
+#### Login to RDP using IP, user and password ####
+#### Open Terminal Application, hit Control + C to avoid screen getting stuck on .bashrc and enter tpo ubuntu home directory ####
+
+cd /home/ubuntu
+
+### Reconfigure Kube Config for root ####
+
+chmod 600 .kube/config
+microk8s config > .kube/config
+chmod 400 .kube/config
+
+ls /mnt/efs/shared_fs/
+sudo chmod -R 777 /mnt/efs/shared_fs/
+sudo find /mnt/efs/shared_fs \( -type d -exec sudo chmod u+rwx,g+rwx,o+rx {} \; -o -type f -exec sudo chmod u+rw,g+rw,o+r {} \; \)
+
+
+kubectl get nodes
+
+kubectl delete node microk8s 
+
+kubectl get nodes
+
+kubectl get pods -A
+
+kubectl get nodes -o custom-columns=NAME:.metadata.name | grep '^ip' | xargs -I {} kubectl label node {} node-role.kubernetes.io/gpu-worker=worker
+
+kubectl get nodes -o custom-columns=NAME:.metadata.name | grep '^ip' | xargs -I {} kubectl label node {} nodegroup-role=gpu-worker 
+
+kubectl get nodes --show-labels | grep -i gpu
+
+kubectl get pods
+
+kubectl get svc
+
+kubectl run psql -it --rm=true --image=postgres:13 --env=PGPASSWORD=your-database-password --command -- psql -h postgres-service -U postgres postgres
+
+### Hit "Enter" if you don't see a prompt for SQL, Paste below steps one by one ###
+
+\l
+
+CREATE DATABASE pachyderm;
+
+CREATE DATABASE dex;
+
+CREATE DATABASE determined;
+
+GRANT ALL PRIVILEGES ON DATABASE pachyderm TO postgres;
+
+GRANT ALL PRIVILEGES ON DATABASE dex TO postgres;
+
+GRANT ALL PRIVILEGES ON DATABASE determined TO postgres;
+\l
+\q
+
+
+kubectl get pods -A
+
+
+### Hit Control and C if getting Stuck #####
+
+
+
+### Go to browser and verify Pachyderm and Determined (user admin, password blank) are opening in FireFox, remove all unwanted projects if any are present #####
+
+kubectl get pods -A
+
+#### Check if there is a setenv file on home directory, if not create one with nano setenv.sh and add the below code, Control S + Control X to save nano #####
+
+#!/bin/bash
+export NAME="your-name-pdk"
+export DB_CONNECTION_STRING="postgres-service.default.svc.cluster.local."
+export DB_ADMIN_PASSWORD="your-database-password"
+export MLDM_NAMESPACE="pachyderm"
+export KSERVE_MODELS_NAMESPACE="models"
+export MLDM_HOST=$(kubectl get svc --namespace ${MLDM_NAMESPACE} pachyderm-proxy --output jsonpath='{.status.loadBalancer.ingress[0].ip}')
+export MLDM_URL="http://${MLDM_HOST}:9090"
+echo $MLDM_URL
+export MLDE_HOST=$(kubectl get svc determined-master-service-determinedai --output jsonpath='{.status.loadBalancer.ingress[0].ip}')
+export MLDE_URL="http://${MLDE_HOST}:8080"
+echo $MLDE_URL
+export DET_MASTER=${MLDE_HOST}:8080
+echo $DET_MASTER
+export INGRESS_HOST=$(kubectl -n istio-system get service istio-ingressgateway -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+export INGRESS_PORT=$(kubectl -n istio-system get service istio-ingressgateway -o jsonpath='{.spec.ports[?(@.name=="http2")].port}')
+export SERVICE_HOSTNAME=$(kubectl get inferenceservice sklearn-iris -n ${KSERVE_MODELS_NAMESPACE} -o jsonpath='{.status.url}' | cut -d "/" -f 3)
+echo $INGRESS_HOST
+echo $INGRESS_PORT
+echo $SERVICE_HOSTNAME
+export MLDE_SVC=determined-master-service-determinedai.default.svc.cluster.local
+export MLDM_SVC=pachyderm-proxy.${MLDM_NAMESPACE}.svc.cluster.local
+export AZ_REGION=$(kubectl get cm pdk-config -o=jsonpath='{.data.region}') && echo $AZ_REGION
+export MLDM_NAMESPACE=$(kubectl get cm pdk-config -o=jsonpath='{.data.mldm_namespace}') && echo $MLDM_NAMESPACE
+export MLDM_BUCKET_NAME=$(kubectl get cm pdk-config -o=jsonpath='{.data.mldm_bucket_name}') && echo $MLDM_BUCKET_NAME
+export MLDM_HOST=$(kubectl get cm pdk-config -o=jsonpath='{.data.mldm_host}') && echo $MLDM_HOST
+export MLDM_PORT=$(kubectl get cm pdk-config -o=jsonpath='{.data.mldm_port}') && echo $MLDM_PORT
+export MLDM_URL=$(kubectl get cm pdk-config -o=jsonpath='{.data.mldm_url}') && echo $MLDM_URL
+export MLDM_PIPELINE_SECRET=$(kubectl get cm pdk-config -o=jsonpath='{.data.mldm_pipeline_secret}') && echo $MLDM_PIPELINE_SECRET
+export MLDE_BUCKET_NAME=$(kubectl get cm pdk-config -o=jsonpath='{.data.mlde_bucket_name}') && echo $MLDE_BUCKET_NAME
+export MLDE_HOST=$(kubectl get cm pdk-config -o=jsonpath='{.data.mlde_host}') && echo $MLDE_HOST
+export MLDE_PORT=$(kubectl get cm pdk-config -o=jsonpath='{.data.mlde_port}') && echo $MLDE_PORT
+export MLDE_URL=$(kubectl get cm pdk-config -o=jsonpath='{.data.mlde_url}') && echo $MLDE_URL
+export MODEL_ASSETS_BUCKET_NAME=$(kubectl get cm pdk-config -o=jsonpath='{.data.kserve_model_bucket_name}') && echo $MODEL_ASSETS_BUCKET_NAME
+export KSERVE_MODELS_NAMESPACE=$(kubectl get cm pdk-config -o=jsonpath='{.data.kserve_model_namespace}') && echo $KSERVE_MODELS_NAMESPACE
+export INGRESS_HOST=$(kubectl get cm pdk-config -o=jsonpath='{.data.kserve_ingress_host}') && echo $INGRESS_HOST
+export INGRESS_PORT=$(kubectl get cm pdk-config -o=jsonpath='{.data.kserve_ingress_port}') && echo $INGRESS_PORT
+export DB_CONNECTION_URL=$(kubectl get cm pdk-config -o=jsonpath='{.data.db_connection_string}') && echo $DB_CONNECTION_URL
+export REGISTRY_URI=$(kubectl get cm pdk-config -o=jsonpath='{.data.registry_uri}') && echo $REGISTRY_URI
+export NAME=$(kubectl get cm pdk-config -o=jsonpath='{.data.pdk_name}') && echo $NAME
+
+######################################################################################################
+
+chmod +x setenv.sh
+
+source setenv.sh
+
+sudo pip3 install determined 
+
+det w create "PDK Demos"
+
+det p create "PDK Demos" pdk-dogs-and-cats
+
+pachctl connect ${MLDM_URL}
+
+pachctl config set active-context ${MLDM_URL}
+
+pachctl create project pdk-dogs-and-cats
+
+pachctl config update context --project pdk-dogs-and-cats
+
+pachctl create repo dogs-and-cats-data
+
+pachctl list repo
+
+cd /home/ubuntu/pdk/examples/dog-cat/pipelines
+
+pachctl create pipeline -f _on_prem_training-pipeline.json
+
+kubectl get pods -n pachyderm
+
+kubectl patch replicationcontroller pdk-dogs-and-cats-dogs-and-cats-model-v1 -n pachyderm --type='json' -p='[
+      {
+        "op": "remove",
+        "path": "/spec/template/spec/containers/0/resources/requests/cpu"
+      },
+      {
+        "op": "remove",
+        "path": "/spec/template/spec/containers/0/resources/requests/memory"
+      },
+      {
+        "op": "remove",
+        "path": "/spec/template/spec/containers/1/resources/requests/cpu"
+      },
+      {
+        "op": "remove",
+        "path": "/spec/template/spec/containers/1/resources/requests/memory"
+      },
+      {
+        "op": "remove",
+        "path": "/spec/template/spec/initContainers/0/resources/requests/cpu"
+      },
+      {
+        "op": "remove",
+        "path": "/spec/template/spec/initContainers/0/resources/requests/memory"
+      }
+      ]'
+
+kubectl scale replicationcontroller pdk-dogs-and-cats-dogs-and-cats-model-v1 -n pachyderm --replicas=0
+
+kubectl get pods -n pachyderm -l app=pipeline,component=worker,pipelineName=dogs-and-cats-model,pipelineProject=pdk-dogs-and-cats,pipelineVersion=1
+
+pachctl create pipeline -f _on_prem_deployment-pipeline.json
+
+pachctl list pipeline
+
+kubectl patch replicationcontroller pdk-dogs-and-cats-dogs-and-cats-deploy-v1 -n pachyderm --type='json' -p='[
+      {
+        "op": "remove",
+        "path": "/spec/template/spec/containers/0/resources/requests/cpu"
+      },
+      {
+        "op": "remove",
+        "path": "/spec/template/spec/containers/0/resources/requests/memory"
+      },
+      {
+        "op": "remove",
+        "path": "/spec/template/spec/containers/1/resources/requests/cpu"
+      },
+      {
+        "op": "remove",
+        "path": "/spec/template/spec/containers/1/resources/requests/memory"
+      },
+      {
+        "op": "remove",
+        "path": "/spec/template/spec/initContainers/0/resources/requests/cpu"
+      },
+      {
+        "op": "remove",
+        "path": "/spec/template/spec/initContainers/0/resources/requests/memory"
+      }
+      ]'
+
+kubectl scale replicationcontroller pdk-dogs-and-cats-dogs-and-cats-deploy-v1 -n pachyderm --replicas=0
+
+kubectl get pods -n pachyderm -l app=pipeline,component=worker,pipelineName=dogs-and-cats-deploy,pipelineProject=pdk-dogs-and-cats,pipelineVersion=1
+
+kubectl get pods -n pachyderm 
+
+pachctl list pipelines
+
+#### Verify the pipelines are running in firefox and Jobs are success in GUI ####
+
+
+cd /home/ubuntu/pdk/examples/dog-cat/sample-data
+
+pachctl put file dogs-and-cats-data@master:/data1 -f ./dog-cat -r
+
+pachctl list commits
+
+kubectl get pods -A
+
+### See the experiment runs here and in GUI of dertermined ####
+
+
+
+kubectl -n ${KSERVE_MODELS_NAMESPACE} get inferenceservices
+
+curl -v -H "Host: dogcat-deploy.models.example.com" http://${INGRESS_HOST}:${INGRESS_PORT}/v1/models/dogs-and-cats:predict -d @./cat.json
+
+
+curl -v -H "Host: dogcat-deploy.models.example.com" http://${INGRESS_HOST}:${INGRESS_PORT}/v1/models/dogs-and-cats:predict -d @./dog.json
+
+
+http://192.168.0.107:8080/
+http://192.168.0.105:9090/
